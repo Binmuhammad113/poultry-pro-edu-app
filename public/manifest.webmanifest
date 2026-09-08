@@ -1,0 +1,24 @@
+{
+  "name": "PoultryPro Edu",
+  "short_name": "PoultryPro",
+  "description": "PoultryPro Edu helps farmers and agripreneurs learn practical poultry production skills.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7faf8",
+  "theme_color": "#0f9d5d",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
