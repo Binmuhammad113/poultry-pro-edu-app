@@ -10,6 +10,9 @@ const distDir = resolve(fileURLToPath(new URL('../dist/', import.meta.url)))
 const isProduction = process.env.NODE_ENV === 'production'
 const allowedOrigin = process.env.CORS_ORIGIN || ''
 const sessionMaxAge = 60 * 60 * 24 * 7
+const authRateWindowMs = 15 * 60 * 1000
+const authRateLimit = 10
+const authAttempts = new Map()
 
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex')
@@ -58,6 +61,27 @@ function publicUser(user) {
   return { id: user.id, name: user.name, email: user.email }
 }
 
+function requestIp(request) {
+  return request.headers['x-forwarded-for']?.split(',')[0].trim() || request.socket.remoteAddress || 'unknown'
+}
+
+function authRateKey(request, pathname) {
+  return `${requestIp(request)}:${pathname}`
+}
+
+function checkAuthRateLimit(request, pathname) {
+  const key = authRateKey(request, pathname)
+  const now = Date.now()
+  const attempts = (authAttempts.get(key) || []).filter((timestamp) => now - timestamp < authRateWindowMs)
+  if (attempts.length >= authRateLimit) {
+    const retryAfter = Math.ceil((authRateWindowMs - (now - attempts[0])) / 1000)
+    return retryAfter
+  }
+  attempts.push(now)
+  authAttempts.set(key, attempts)
+  return 0
+}
+
 const server = createServer(async (request, response) => {
   if (request.method === 'OPTIONS') return sendJson(response, 204, {})
 
@@ -66,6 +90,8 @@ const server = createServer(async (request, response) => {
     if (pathname === '/api/health' && request.method === 'GET') return sendJson(response, 200, { ok: true, service: 'poultrypro-api' })
 
     if (pathname === '/api/auth/register' && request.method === 'POST') {
+      const retryAfter = checkAuthRateLimit(request, pathname)
+      if (retryAfter) return sendJson(response, 429, { error: 'Too many registration attempts. Please try again later.' }, { 'Retry-After': String(retryAfter) })
       const { name, email, password } = await readBody(request)
       if (!name || !email || !password || password.length < 6) return sendJson(response, 400, { error: 'Name, email, and a 6-character password are required' })
       if (await repository.findByEmail(email.toLowerCase())) return sendJson(response, 409, { error: 'An account with this email already exists' })
@@ -76,6 +102,8 @@ const server = createServer(async (request, response) => {
     }
 
     if (pathname === '/api/auth/login' && request.method === 'POST') {
+      const retryAfter = checkAuthRateLimit(request, pathname)
+      if (retryAfter) return sendJson(response, 429, { error: 'Too many sign-in attempts. Please try again later.' }, { 'Retry-After': String(retryAfter) })
       const { email, password } = await readBody(request)
       const user = await repository.findByEmail(email?.toLowerCase())
       if (!user || !verifyPassword(password || '', user.passwordHash)) return sendJson(response, 401, { error: 'Incorrect email or password' })
