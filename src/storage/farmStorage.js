@@ -73,6 +73,28 @@ export async function authenticate(path, credentials) {
   return payload.user
 }
 
+export async function requestPasswordReset(email) {
+  const response = await fetch('/api/auth/request-password-reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  const payload = await response.json()
+  if (!response.ok) throw new Error(payload.error || 'Unable to request password reset')
+  return payload
+}
+
+export async function resetPassword(token, password) {
+  const response = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  })
+  const payload = await response.json()
+  if (!response.ok) throw new Error(payload.error || 'Unable to reset password')
+  return payload
+}
+
 export async function logout() {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
 }

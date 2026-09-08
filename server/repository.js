@@ -34,6 +34,14 @@ export async function createRepository() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        token TEXT PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ
+      )
+    `)
     return {
       mode: 'postgres',
       async findById(id) { return mapUser((await pool.query('SELECT * FROM users WHERE id = $1', [id])).rows[0]) },
@@ -55,6 +63,29 @@ export async function createRepository() {
       },
       async deleteSession(token) {
         await pool.query('DELETE FROM sessions WHERE token = $1', [token])
+      },
+      async createPasswordReset(token, userId, expiresAt) {
+        await pool.query('DELETE FROM password_resets WHERE user_id = $1 OR expires_at <= NOW()', [userId])
+        await pool.query('INSERT INTO password_resets (token, user_id, expires_at) VALUES ($1, $2, $3)', [token, userId, expiresAt])
+      },
+      async consumePasswordReset(token) {
+        const client = await pool.connect()
+        try {
+          await client.query('BEGIN')
+          const result = await client.query('SELECT user_id FROM password_resets WHERE token = $1 AND expires_at > NOW() AND used_at IS NULL FOR UPDATE', [token])
+          const userId = result.rows[0]?.user_id || null
+          if (userId) await client.query('UPDATE password_resets SET used_at = NOW() WHERE token = $1', [token])
+          await client.query('COMMIT')
+          return userId
+        } catch (error) {
+          await client.query('ROLLBACK')
+          throw error
+        } finally {
+          client.release()
+        }
+      },
+      async deleteUserSessions(userId) {
+        await pool.query('DELETE FROM sessions WHERE user_id = $1', [userId])
       },
     }
   }
@@ -87,6 +118,32 @@ export async function createRepository() {
     async deleteSession(token) {
       const users = await this.readUsers()
       await this.writeUsers(users.map((user) => ({ ...user, sessions: user.sessions?.filter((session) => session.token !== token) || [] })))
+    },
+    async createPasswordReset(token, userId, expiresAt) {
+      const users = await this.readUsers()
+      const user = users.find((entry) => entry.id === userId)
+      if (!user) return
+      user.passwordResets = [{ token, expiresAt }]
+      await this.writeUsers(users)
+    },
+    async consumePasswordReset(token) {
+      const users = await this.readUsers()
+      const now = Date.now()
+      let userId = null
+      for (const user of users) {
+        const reset = user.passwordResets?.find((entry) => entry.token === token && new Date(entry.expiresAt).getTime() > now && !entry.usedAt)
+        if (reset) {
+          reset.usedAt = new Date().toISOString()
+          userId = user.id
+          break
+        }
+      }
+      await this.writeUsers(users)
+      return userId
+    },
+    async deleteUserSessions(userId) {
+      const users = await this.readUsers()
+      await this.writeUsers(users.map((user) => user.id === userId ? { ...user, sessions: [] } : user))
     },
   }
 }

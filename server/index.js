@@ -10,6 +10,7 @@ const distDir = resolve(fileURLToPath(new URL('../dist/', import.meta.url)))
 const isProduction = process.env.NODE_ENV === 'production'
 const allowedOrigin = process.env.CORS_ORIGIN || ''
 const sessionMaxAge = 60 * 60 * 24 * 7
+const passwordResetMaxAge = 30 * 60 * 1000
 const authRateWindowMs = 15 * 60 * 1000
 const authRateLimit = 10
 const authAttempts = new Map()
@@ -110,6 +111,32 @@ const server = createServer(async (request, response) => {
       const session = randomBytes(24).toString('hex')
       await repository.createSession(session, user.id, new Date(Date.now() + sessionMaxAge * 1000))
       return sendJson(response, 200, { user: publicUser(user) }, { 'Set-Cookie': sessionCookie(session) })
+    }
+
+    if (pathname === '/api/auth/request-password-reset' && request.method === 'POST') {
+      const retryAfter = checkAuthRateLimit(request, pathname)
+      if (retryAfter) return sendJson(response, 429, { error: 'Too many reset requests. Please try again later.' }, { 'Retry-After': String(retryAfter) })
+      const { email } = await readBody(request)
+      const user = await repository.findByEmail(email?.toLowerCase())
+      const payload = { message: 'If an account exists for that email, password reset instructions are ready.' }
+      if (user) {
+        const token = randomBytes(32).toString('hex')
+        await repository.createPasswordReset(token, user.id, new Date(Date.now() + passwordResetMaxAge))
+        if (!isProduction) payload.resetToken = token
+      }
+      return sendJson(response, 200, payload)
+    }
+
+    if (pathname === '/api/auth/reset-password' && request.method === 'POST') {
+      const { token, password } = await readBody(request)
+      if (!token || !password || password.length < 6) return sendJson(response, 400, { error: 'A valid token and a 6-character password are required' })
+      const userId = await repository.consumePasswordReset(token)
+      if (!userId) return sendJson(response, 400, { error: 'This reset link is invalid or has expired' })
+      const user = await repository.findById(userId)
+      user.passwordHash = hashPassword(password)
+      await repository.update(user)
+      await repository.deleteUserSessions(userId)
+      return sendJson(response, 200, { message: 'Password updated. You can now sign in.' })
     }
 
     if (pathname === '/api/auth/logout' && request.method === 'POST') {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { addFarmEntity, getFarmSummary, withFarmRecord } from './domain/farm'
-import { authenticate, getCurrentUser, loadFarmState, loadFarmStateFromApi, logout, saveFarmState, saveFarmStateToApi } from './storage/farmStorage'
+import { authenticate, getCurrentUser, loadFarmState, loadFarmStateFromApi, logout, requestPasswordReset, resetPassword, saveFarmState, saveFarmStateToApi } from './storage/farmStorage'
 
 const navItems = [
   { label: 'Overview', icon: '↗' },
@@ -14,16 +14,29 @@ const navItems = [
 function AuthScreen({ onAuthenticated }) {
   const [mode, setMode] = useState('login')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [resetToken, setResetToken] = useState('')
   const [busy, setBusy] = useState(false)
 
   const submit = async (event) => {
     event.preventDefault()
     setBusy(true)
     setError('')
+    setNotice('')
     const form = new FormData(event.currentTarget)
     try {
-      const user = await authenticate(mode, { name: form.get('name'), email: form.get('email'), password: form.get('password') })
-      onAuthenticated(user)
+      if (mode === 'forgot') {
+        const payload = await requestPasswordReset(form.get('email'))
+        setResetToken(payload.resetToken || '')
+        setNotice(payload.message)
+      } else if (mode === 'reset') {
+        await resetPassword(form.get('token'), form.get('password'))
+        setMode('login')
+        setNotice('Password updated. Sign in with your new password.')
+      } else {
+        const user = await authenticate(mode, { name: form.get('name'), email: form.get('email'), password: form.get('password') })
+        onAuthenticated(user)
+      }
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -31,7 +44,9 @@ function AuthScreen({ onAuthenticated }) {
     }
   }
 
-  return <main className="auth-shell"><div className="auth-card"><div className="auth-brand"><span className="brand-mark">P</span><strong>PoultryPro</strong></div><p className="eyebrow">Farm management workspace</p><h1>{mode === 'login' ? 'Welcome back' : 'Create your farm account'}</h1><p className="auth-copy">Manage your flocks, inventory, finances, and daily farm records in one place.</p><div className="auth-tabs"><button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>Sign in</button><button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>Create account</button></div><form onSubmit={submit}>{mode === 'register' && <label>Your name<input name="name" placeholder="Abdulkadir Muhammad" required /></label>}<label>Email address<input name="email" type="email" placeholder="you@example.com" required /></label><label>Password<input name="password" type="password" placeholder="At least 6 characters" minLength="6" required /></label>{error && <p className="auth-error">{error}</p>}<button className="primary-button auth-submit" disabled={busy}>{busy ? 'Please wait...' : mode === 'login' ? 'Sign in to farm' : 'Create farm account'}</button></form><small className="auth-note">Your farm data is private to your account.</small></div></main>
+  const isReset = mode === 'reset'
+  const isForgot = mode === 'forgot'
+  return <main className="auth-shell"><div className="auth-card"><div className="auth-brand"><span className="brand-mark">P</span><strong>PoultryPro</strong></div><p className="eyebrow">Farm management workspace</p><h1>{isForgot ? 'Reset your password' : isReset ? 'Choose a new password' : mode === 'login' ? 'Welcome back' : 'Create your farm account'}</h1><p className="auth-copy">{isForgot ? 'Enter your email and we will help you recover access to your farm.' : isReset ? 'Use the reset token from your recovery message to secure your account again.' : 'Manage your flocks, inventory, finances, and daily farm records in one place.'}</p>{!isForgot && !isReset && <div className="auth-tabs"><button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); setNotice('') }}>Sign in</button><button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => { setMode('register'); setError(''); setNotice('') }}>Create account</button></div>}<form onSubmit={submit}>{mode === 'register' && <label>Your name<input name="name" placeholder="Abdulkadir Muhammad" required /></label>}{isReset ? <><label>Reset token<input name="token" defaultValue={resetToken} placeholder="Paste your reset token" required /></label><label>New password<input name="password" type="password" placeholder="At least 6 characters" minLength="6" required /></label></> : <label>Email address<input name="email" type="email" placeholder="you@example.com" required /></label>}{mode !== 'forgot' && !isReset && <label>Password<input name="password" type="password" placeholder="At least 6 characters" minLength="6" required /></label>}{error && <p className="auth-error">{error}</p>}{notice && <p className="auth-notice">{notice}</p>}{resetToken && isForgot && <div className="reset-token"><strong>Development reset token</strong><code>{resetToken}</code><button type="button" className="text-button" onClick={() => { setMode('reset'); setError(''); setNotice('') }}>Continue to reset password <span>→</span></button></div>}<button className="primary-button auth-submit" disabled={busy}>{busy ? 'Please wait...' : isForgot ? 'Send reset instructions' : isReset ? 'Update password' : mode === 'login' ? 'Sign in to farm' : 'Create farm account'}</button></form>{!isForgot && !isReset && mode === 'login' && <button type="button" className="auth-link" onClick={() => { setMode('forgot'); setError(''); setNotice('') }}>Forgot password?</button>}{(isForgot || isReset) && <button type="button" className="auth-link" onClick={() => { setMode('login'); setError(''); setNotice(''); setResetToken('') }}>Back to sign in</button>}<small className="auth-note">Your farm data is private to your account.</small></div></main>
 }
 
 function ManagementView({ activeNav, onAddRecord, farm, query, highlightMatches }) {
