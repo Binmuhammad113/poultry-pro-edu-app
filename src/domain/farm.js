@@ -70,6 +70,25 @@ export function addFarmEntity(state, entityType, values) {
   return { ...state, finances: [{ id, description: values.description || details, type: values.type || 'Income', amount: `${values.type === 'Expense' ? '-' : '+'} ₦${Number(values.amount || 0).toLocaleString()}`, tone: values.type === 'Expense' ? 'expense' : 'income', date: 'Sep 08, 2026' }, ...state.finances], activities: [activity, ...state.activities] }
 }
 
+export function updateFarmEntity(state, entityType, id, values) {
+  const collection = entityType === 'flock' ? 'flocks' : entityType === 'inventory' ? 'inventory' : 'finances'
+  const current = state[collection].find((entry) => entry.id === id)
+  if (!current) return state
+
+  const updated = entityType === 'flock'
+    ? { ...current, name: values.name || current.name, type: values.type || current.type, age: values.age || current.age, birds: Number(values.birds) || current.birds }
+    : entityType === 'inventory'
+      ? { ...current, item: values.item || current.item, category: values.category || current.category, quantity: values.quantity || current.quantity }
+      : { ...current, description: values.description || current.description, type: values.type || current.type, amount: `${values.type === 'Expense' ? '-' : '+'} ₦${Number(values.amount || 0).toLocaleString()}`, tone: values.type === 'Expense' ? 'expense' : 'income' }
+
+  return { ...state, [collection]: state[collection].map((entry) => entry.id === id ? updated : entry) }
+}
+
+export function deleteFarmEntity(state, entityType, id) {
+  const collection = entityType === 'flock' ? 'flocks' : entityType === 'inventory' ? 'inventory' : 'finances'
+  return { ...state, [collection]: state[collection].filter((entry) => entry.id !== id) }
+}
+
 function parseCurrency(value) {
   const normalized = String(value || '').replace(/[^\d.-]/g, '')
   const parsed = Number.parseFloat(normalized)
