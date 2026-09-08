@@ -11,6 +11,7 @@ const isProduction = process.env.NODE_ENV === 'production'
 const allowedOrigin = process.env.CORS_ORIGIN || ''
 const sessionMaxAge = 60 * 60 * 24 * 7
 const passwordResetMaxAge = 30 * 60 * 1000
+const appUrl = process.env.APP_URL || `http://localhost:${port}`
 const authRateWindowMs = 15 * 60 * 1000
 const authRateLimit = 10
 const authAttempts = new Map()
@@ -60,6 +61,30 @@ async function readBody(request) {
 
 function publicUser(user) {
   return { id: user.id, name: user.name, email: user.email }
+}
+
+async function sendPasswordResetEmail(email, token) {
+  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) {
+    if (isProduction) console.warn('Password reset email skipped: RESEND_API_KEY and EMAIL_FROM are required')
+    return false
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: process.env.EMAIL_FROM,
+      to: [email],
+      subject: 'Reset your PoultryPro password',
+      text: `Reset your PoultryPro password within 30 minutes: ${appUrl}/?reset=${token}`,
+      html: `<p>Reset your PoultryPro password within 30 minutes.</p><p><a href="${appUrl}/?reset=${token}">Reset password</a></p>`,
+    }),
+  })
+  if (!response.ok) throw new Error(`Email provider returned ${response.status}`)
+  return true
 }
 
 function requestIp(request) {
@@ -122,6 +147,7 @@ const server = createServer(async (request, response) => {
       if (user) {
         const token = randomBytes(32).toString('hex')
         await repository.createPasswordReset(token, user.id, new Date(Date.now() + passwordResetMaxAge))
+        await sendPasswordResetEmail(user.email, token)
         if (!isProduction) payload.resetToken = token
       }
       return sendJson(response, 200, payload)

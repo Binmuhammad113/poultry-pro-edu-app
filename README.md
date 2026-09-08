@@ -49,6 +49,8 @@ docker run --env DATABASE_URL="<postgres-connection-string>" -p 8787:8787 poultr
 
 Set `DATABASE_URL` and `NODE_ENV=production` in the hosting provider. Set `CORS_ORIGIN` only when the frontend is hosted on a different domain; for the included single-service deployment, leave it empty. Production sessions are stored in the database, survive service restarts, and use secure HTTP-only cookies. Without `DATABASE_URL`, local development uses the JSON repository fallback.
 
+Password reset emails use Resend when `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_URL` are configured. For Railway, set these variables on the `poultrypro` service. Use a verified sender domain for `EMAIL_FROM`, for example `PoultryPro <noreply@yourdomain.com>`. Without these variables, local development still exposes a one-time reset token, while production logs a configuration warning and keeps the response generic.
+
 ### Render deployment
 
 1. Push this repository to GitHub or another Git provider.

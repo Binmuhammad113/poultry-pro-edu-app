@@ -12,11 +12,16 @@ const navItems = [
 ]
 
 function AuthScreen({ onAuthenticated }) {
-  const [mode, setMode] = useState('login')
+  const initialResetToken = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('reset') || '' : ''
+  const [mode, setMode] = useState(initialResetToken ? 'reset' : 'login')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [resetToken, setResetToken] = useState('')
+  const [resetToken, setResetToken] = useState(initialResetToken)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (initialResetToken) window.history.replaceState({}, '', window.location.pathname)
+  }, [initialResetToken])
 
   const submit = async (event) => {
     event.preventDefault()
