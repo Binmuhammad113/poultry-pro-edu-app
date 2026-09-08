@@ -38,6 +38,8 @@ railway status
 railway logs --service poultrypro --lines 100
 ```
 
+Railway can monitor `GET /api/health`. It returns `200` only when the active storage backend responds successfully, and `503` when PostgreSQL or the local storage backend is unavailable.
+
 Render deployment is configured in [render.yaml](render.yaml): create a new Blueprint from this repository and Render will provision the web service and PostgreSQL database. The service runs `npm ci && npm run build` and starts with `npm start`.
 
 For Docker-based hosting:

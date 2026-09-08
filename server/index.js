@@ -113,7 +113,15 @@ const server = createServer(async (request, response) => {
 
   try {
     const pathname = new URL(request.url, `http://${request.headers.host}`).pathname
-    if (pathname === '/api/health' && request.method === 'GET') return sendJson(response, 200, { ok: true, service: 'poultrypro-api' })
+    if (pathname === '/api/health' && request.method === 'GET') {
+      try {
+        await repository.healthCheck()
+        return sendJson(response, 200, { ok: true, service: 'poultrypro-api', storage: repository.mode })
+      } catch (error) {
+        console.error('Health check failed', error)
+        return sendJson(response, 503, { ok: false, service: 'poultrypro-api', error: 'Storage unavailable' })
+      }
+    }
 
     if (pathname === '/api/auth/register' && request.method === 'POST') {
       const retryAfter = checkAuthRateLimit(request, pathname)

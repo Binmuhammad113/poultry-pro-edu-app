@@ -44,6 +44,7 @@ export async function createRepository() {
     `)
     return {
       mode: 'postgres',
+      async healthCheck() { await pool.query('SELECT 1'); return true },
       async findById(id) { return mapUser((await pool.query('SELECT * FROM users WHERE id = $1', [id])).rows[0]) },
       async findByEmail(email) { return mapUser((await pool.query('SELECT * FROM users WHERE email = $1', [email])).rows[0]) },
       async create(user) {
@@ -93,6 +94,7 @@ export async function createRepository() {
   await mkdir(dataDir, { recursive: true })
   return {
     mode: 'file',
+    async healthCheck() { await this.readUsers(); return true },
     async readUsers() {
       try { return JSON.parse(await readFile(usersFile, 'utf8')) } catch { return [] }
     },
